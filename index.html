@@ -158,7 +158,17 @@
             position: sticky;
             top: var(--hh);
             height: calc(100vh - var(--hh));
-            overflow: hidden
+            overflow: hidden;
+            background: var(--mint)
+        }
+
+        .media-fallback .beat {
+            color: var(--ink);
+            text-shadow: none
+        }
+
+        .media-fallback .beat p {
+            color: var(--mute) !important
         }
 
         #cv {
@@ -820,26 +830,59 @@
         <div class="fine"><span>© 2026 Leecycle</span><span>Privacy · Terms</span></div>
     </footer>
     <script>
-        const VID = "/_blob/b87059564c64f5544b1b62de376a21be", FR = 263, FPS = 24;
+        const VID = "Leecycle_%20waste%2C%20handled.webm", FR = 263, FPS = 24;
         const $ = s => document.querySelector(s), cl = (v, a, b) => Math.min(b, Math.max(a, v)), sm = v => { v = cl(v, 0, 1); return v * v * (3 - 2 * v) };
         const RM = matchMedia('(prefers-reduced-motion:reduce)').matches;
         const cv = $('#cv'), cx = cv.getContext('2d'), vd = document.createElement('video');
         vd.muted = true; vd.playsInline = true; vd.preload = 'auto'; vd.setAttribute('playsinline', '');
         let started = false, want = .5 / FPS, busy = false;
         function prog(v) { $('#pn').textContent = v; $('#pb').style.width = v + '%' }
-        const xr = new XMLHttpRequest(); xr.open('GET', VID); xr.responseType = 'blob';
-        xr.onprogress = e => { if (e.lengthComputable) prog(Math.round(e.loaded / e.total * 100)) };
-        xr.onload = () => { vd.src = URL.createObjectURL(xr.response) }; xr.onerror = () => { vd.src = VID }; xr.send();
-        vd.addEventListener('loadeddata', () => { prog(100); busy = true; vd.currentTime = want });
-        vd.addEventListener('seeked', () => { busy = false; if (!started) { start(); return } paint(); if (Math.abs(vd.currentTime - want) > .01) go() });
-        function go() { busy = true; vd.currentTime = want }
-        function fit() { const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); cx.imageSmoothingQuality = 'high'; if (started) paint() }
+        function fit() { const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); cx.imageSmoothingQuality = 'high'; if (started && vd.videoWidth) paint() }
         function paint() {
             const W = vd.videoWidth, H = vd.videoHeight, cw = cv.width, ch = cv.height, ar = cw / ch, vr = W / H;
+            if (!W || !H || !cw || !ch) return;
             if (ar > vr) { cx.save(); cx.filter = 'blur(28px)'; cx.drawImage(vd, 0, 0, W, H, -40, -40, cw + 80, ch + 80); cx.restore(); const dw = ch * vr; cx.drawImage(vd, 0, 0, W, H, (cw - dw) / 2, 0, dw, ch) }
             else { const sw = H * ar; cx.drawImage(vd, (W - sw) / 2, 0, sw, H, 0, 0, cw, ch) }
         }
-        function start() { started = true; fit(); paint(); setTimeout(() => { $('#pre').classList.add('off'); document.body.classList.add('go') }, 450) }
+        let startupTimer;
+        function start() {
+            prog(100);
+            if (!started) {
+                started = true;
+                clearTimeout(startupTimer);
+                fit();
+                if (!vd.videoWidth) document.body.classList.add('media-fallback');
+                document.body.classList.add('go');
+                setTimeout(() => $('#pre').classList.add('off'), 450);
+            }
+        }
+        const videoURL = new URL(VID, document.baseURI).href, xr = new XMLHttpRequest();
+        xr.open('GET', videoURL);
+        xr.responseType = 'blob';
+        xr.onprogress = e => { if (e.lengthComputable) prog(Math.min(99, Math.round(e.loaded / e.total * 100))) };
+        xr.onload = () => {
+            if ((xr.status >= 200 && xr.status < 300 || xr.status === 0) && xr.response && xr.response.size) {
+                vd.src = URL.createObjectURL(xr.response);
+            } else {
+                document.body.classList.add('media-fallback');
+                vd.src = videoURL;
+            }
+        };
+        xr.onerror = () => {
+            document.body.classList.add('media-fallback');
+            vd.src = videoURL;
+        };
+        xr.send();
+        vd.addEventListener('loadeddata', () => {
+            document.body.classList.remove('media-fallback');
+            start();
+            fit();
+            paint();
+        });
+        vd.addEventListener('error', () => { document.body.classList.add('media-fallback'); start() });
+        startupTimer = setTimeout(() => { document.body.classList.add('media-fallback'); start() }, 10000);
+        vd.addEventListener('seeked', () => { busy = false; if (!started) { start(); return } paint(); if (Math.abs(vd.currentTime - want) > .01) go() });
+        function go() { busy = true; vd.currentTime = want }
         addEventListener('resize', fit);
         const story = $('#story'), beats = [...document.querySelectorAll('.beat')], rf = $('#rf');
         const SK = [...document.querySelectorAll('.sk')].map(s => { const p = s.querySelector('path'), L = p.getTotalLength(); p.style.strokeDasharray = L; p.style.strokeDashoffset = L; return { p, L, sec: s.parentElement } });
@@ -849,7 +892,7 @@
             const r = story.getBoundingClientRect(), H = story.offsetHeight - (innerHeight - 64), p = cl(-r.top / H, 0, 1);
             cur += (p - cur) * (RM ? 1 : .04); if (Math.abs(p - cur) < .0002) cur = p;
             mx += (tx - mx) * .06; my += (ty - my) * .06;
-            if (started) { const fp = cl((cur - .03) / .87, 0, 1), w = (Math.round(fp * (FR - 1)) + .5) / FPS; if (w !== want) { want = w; if (!busy) go() } }
+            if (started && vd.videoWidth) { const fp = cl((cur - .03) / .87, 0, 1), w = (Math.round(fp * (FR - 1)) + .5) / FPS; if (w !== want) { want = w; if (!busy) go() } }
             cv.style.transform = 'scale(1.03) translate(' + (mx * -8) + 'px,' + (my * -5) + 'px)';
             rf.style.transform = 'scaleY(' + cur + ')';
             $('#hint').style.opacity = cur < .02 ? 1 : 0;
